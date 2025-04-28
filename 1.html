@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>幸运大转盘</title>
+<style>
+  body {
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  #wheel-container {
+    position: relative;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    overflow: hidden;
+    margin-bottom: 20px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
+  }
+  #wheel {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    transition: transform 3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .segment {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    clip-path: polygon(50% 50%, 50% 0, 100% 50%);
+    transform-origin: 50% 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 16px;
+    font-weight: bold;
+  }
+  #spinner {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 40px;
+    background-color: #eee;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border: 2px solid #ccc;
+  }
+  #spinner::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-bottom: 15px solid #333;
+  }
+  #results {
+    margin-top: 20px;
+    font-size: 18px;
+    font-weight: bold;
+  }
+  #controls {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 300px;
+  }
+  .input-group {
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+  }
+  .input-group label {
+    width: 80px;
+    margin-right: 10px;
+  }
+  .input-group input[type="text"],
+  .input-group input[type="number"] {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  #add-prize-btn,
+  #spin-button,
+  #reset-button {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 4px;
+    background-color: #007bff;
+    color: white;
+    cursor: pointer;
+    font-size: 16px;
+    margin-top: 10px;
+  }
+  #add-prize-btn {
+    background-color: #28a745;
+  }
+  #reset-button {
+    background-color: #dc3545;
+  }
+  #prize-list-container {
+    margin-top: 20px;
+    width: 300px;
+    border: 1px solid #ccc;
+    padding: 10px;
+    border-radius: 4px;
+  }
+  #prize-list-container h3 {
+    margin-top: 0;
+  }
+  #prize-list {
+    list-style: none;
+    padding: 0;
+  }
+  #prize-list li {
+    margin-bottom: 5px;
+  }
+  .remove-prize-btn {
+    margin-left: 10px;
+    padding: 5px 8px;
+    border: none;
+    border-radius: 4px;
+    background-color: #f0ad4e;
+    color: white;
+    cursor: pointer;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+  <h1>幸运大转盘</h1>
+
+  <div id="controls">
+    <h3>设置奖项</h3>
+    <div class="input-group">
+      <label for="prize-name">奖品名称:</label>
+      <input type="text" id="prize-name">
+    </div>
+    <div class="input-group">
+      <label for="prize-probability">中奖概率 (%):</label>
+      <input type="number" id="prize-probability" min="0" max="100">
+    </div>
+    <button id="add-prize-btn">添加奖项</button>
+
+    <div id="prize-list-container">
+      <h3>当前奖项列表</h3>
+      <ul id="prize-list">
+        </ul>
+    </div>
+  </div>
+
+  <div id="wheel-container">
+    <div id="wheel"></div>
+    <div id="spinner"></div>
+  </div>
+
+  <button id="spin-button" disabled>开始抽奖</button>
+  <div id="results"></div>
+  <button id="reset-button" style="display:none;">再来一次</button>
+
+  <script>
+    const wheel = document.getElementById('wheel');
+    const spinner = document.getElementById('spinner');
+    const resultsDiv = document.getElementById('results');
+    const spinButton = document.getElementById('spin-button');
+    const resetButton = document.getElementById('reset-button');
+    const addPrizeButton = document.getElementById('add-prize-btn');
+    const prizeNameInput = document.getElementById('prize-name');
+    const prizeProbabilityInput = document.getElementById('prize-probability');
+    const prizeList = document.getElementById('prize-list');
+    const prizeListContainer = document.getElementById('prize-list-container');
+
+    let prizes = [];
+    let totalProbability = 0;
+    let rotation = 0;
+    let spinning = false;
+
+    function updateWheel() {
+      wheel.innerHTML = '';
+      const numSegments = prizes.length;
+      if (numSegments === 0) {
+        wheel.style.backgroundImage = 'none';
+        return;
+      }
+      const angle = 360 / numSegments;
+      let currentAngle = 0;
+
+      prizes.forEach((prize, index) => {
+        const segment = document.createElement('div');
+        segment.classList.add('segment');
+        segment.style.transform = `rotate(${currentAngle}deg)`;
+        segment.style.backgroundColor = `hsl(${index * 60}, 70%, 70%)`;
+        segment.innerHTML = `<span>${prize.name}</span>`;
+        segment.style.clipPath = `polygon(50% 50%, 50% 0, ${50 + 50 * Math.cos((currentAngle + angle / 2) * Math.PI / 180)}% ${50 + 50 * Math.sin((currentAngle + angle / 2) * Math.PI / 180)}%)`;
+        wheel.appendChild(segment);
+        currentAngle += angle;
+      });
+    }
+
+    function updatePrizeListDisplay() {
+      prizeList.innerHTML = '';
+      prizes.forEach((prize, index) => {
+        const listItem = document.createElement('li');
+        listItem.textContent = `${prize.name} (${prize.probability}%)`;
+        const removeButton = document.createElement('button');
+        removeButton.textContent = '移除';
+        removeButton.classList.add('remove-prize-btn');
+        removeButton.addEventListener('click', () => {
+          removePrize(index);
+        });
+        listItem.appendChild(removeButton);
+        prizeList.appendChild(listItem);
+      });
+
+      if (prizes.length > 0) {
+        prizeListContainer.style.display = 'block';
+        spinButton.disabled = false;
+      } else {
+        prizeListContainer.style.display = 'none';
+        spinButton.disabled = true;
+      }
+      updateWheel();
+    }
+
+    function addPrize() {
+      const name = prizeNameInput.value.trim();
+      const probability = parseInt(prizeProbabilityInput.value);
+
+      if (name && !isNaN(probability) && probability >= 0 && probability <= 100) {
+        prizes.push({ name, probability });
+        prizeNameInput.value = '';
+        prizeProbabilityInput.value = '';
+        updatePrizeListDisplay();
+      } else {
+        alert('请填写有效的奖品名称和中奖概率 (0-100)。');
+      }
+    }
+
+    function removePrize(index) {
+      prizes.splice(index, 1);
+      updatePrizeListDisplay();
+    }
+
+    addPrizeButton.addEventListener('click', addPrize);
+
+    spinner.addEventListener('click', () => {
+      if (spinning || prizes.length === 0) return;
+      spinning = true;
+      spinButton.disabled = true;
+      resetButton.style.display = 'none';
+      resultsDiv.textContent = '';
+
+      const randomNumber = Math.random() * totalProbability;
+      let cumulativeProbability = 0;
+      let winningPrizeIndex = -1;
+
+      for (let i = 0; i < prizes.length; i++) {
+        cumulativeProbability += prizes[i].probability;
+        if (randomNumber < cumulativeProbability) {
+          winningPrizeIndex = i;
+          break;
+        }
+      }
+
+      const winningPrize = prizes[winningPrizeIndex];
+      const numSegments = prizes.length;
+      const anglePerSegment = 360 / numSegments;
+      const targetRotation = 360 * 10 + (winningPrizeIndex * anglePerSegment) - (anglePerSegment / 2) + (Math.random() * anglePerSegment / 2); // 多转几圈并随机落入区域
+
+      wheel.style.transition = 'transform 5s cubic-bezier(0.25, 0.46, 0.45, 0.94)'; // 更自然的缓动效果
+      rotation = targetRotation;
+      wheel.style.transform = `rotate(${targetRotation}deg)`;
+
+      setTimeout(() => {
+        spinning = false;
+        resultsDiv.textContent = `恭喜您抽中：${winningPrize.name}!`;
+        resetButton.style.display = 'inline-block';
+      }, 5000);
+    });
+
+    resetButton.addEventListener('click', () => {
+      wheel.style.transition = 'none';
+      rotation = 0;
+      wheel.style.transform = `rotate(${rotation}deg)`;
+      resultsDiv.textContent = '';
+      resetButton.style.display = 'none';
+      spinButton.disabled = false;
+    });
+
+    // 初始化计算总概率
+    function updateTotalProbability() {
+      totalProbability = prizes.reduce((sum, prize) => sum + prize.probability, 0);
+      if (totalProbability > 100) {
+        alert("奖品总中奖概率不能超过 100%。请调整概率。");
+        spinButton.disabled = true;
+      } else if (prizes.length > 0) {
+        spinButton.disabled = false;
+      } else {
+        spinButton.disabled = true;
+      }
+    }
+
+    // 监听奖品数组变化，更新总概率
+    let originalPush = prizes.__proto__.push;
+    prizes.__proto__.push = function() {
+      originalPush.apply(this, arguments);
+      updateTotalProbability();
+    }
+
+    let originalSplice = prizes.__proto__.splice;
+    prizes.__proto__.splice = function() {
+      originalSplice.apply(this, arguments);
+      updateTotalProbability();
+    }
+
+    updatePrizeListDisplay(); // 初始显示
+  </script>
+</body>
+</html>
